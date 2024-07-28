@@ -1,0 +1,29 @@
+import React, { useState } from "react";
+import { View, Text, TouchableOpacity, SafeAreaView } from "react-native";
+
+const App: React.FC = () => {
+  const [expanded, setExpanded] = useState<boolean>(false);
+
+  const toggleExpanded = () => {
+    setExpanded(!expanded);
+  };
+
+  return (
+    <SafeAreaView>
+      <View>
+        <Text numberOfLines={expanded ? undefined : 2}>
+          This is a sample text that will be shown. This part is always visible.
+          Here is the rest of the text that is hidden when the content is
+          collapsed. This part is only visible when expanded. Here is some more
+          text to ensure we have enough lines to test the see more and see less
+          functionality. This should be a good test to see if our functionality
+          works as expected. Adding a few more lines to make sure it looks good.
+        </Text>
+        <TouchableOpacity onPress={toggleExpanded}>
+          <Text>{expanded ? "See Less" : "See More"}</Text>
+        </TouchableOpacity>
+      </View>
+    </SafeAreaView>
+  );
+};
+export default App;
