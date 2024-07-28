@@ -1,0 +1,31 @@
+import { Dimensions, Text, View, ScaledSize } from "react-native";
+import React, { useEffect, useState } from "react";
+
+const Index: React.FC = () => {
+  const [dimensions, setDimensions] = useState<ScaledSize>(
+    Dimensions.get("window")
+  );
+
+  useEffect(() => {
+    const handleDimensionsChange = ({ window }: { window: ScaledSize }) => {
+      setDimensions(window);
+    };
+
+    // Add event listener for dimension changes
+    const subscription = Dimensions.addEventListener(
+      "change",
+      handleDimensionsChange
+    );
+
+    // Cleanup the event listener on component unmount
+    return () => {
+      subscription?.remove();
+    };
+  }, []);
+
+  const { width } = dimensions;
+
+  return <View>{width > 750 ? <Text>hello</Text> : <Text>hi</Text>}</View>;
+};
+
+export default Index;
