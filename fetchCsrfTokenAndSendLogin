@@ -1,0 +1,33 @@
+document.addEventListener('DOMContentLoaded', () => {
+  fetch('/api/csrf-token')
+    .then(response => response.json())
+    .then(data => {
+      document.getElementById('csrfToken').value = data.csrfToken;
+    });
+
+  document.getElementById('loginForm').addEventListener('submit', function(event) {
+    event.preventDefault();
+
+    const username = document.getElementById('username').value;
+    const password = document.getElementById('password').value;
+    const csrfToken = document.getElementById('csrfToken').value;
+
+    fetch('/api/auth/login', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ username, password, _csrf: csrfToken })
+    })
+    .then(response => response.text())
+    .then(data => {
+      const a = (JSON.parse(data))
+      if (a.success) {
+        window.location.href = '/admin.html';
+      } else {
+        document.getElementById('response').textContent = data.message;
+      }
+    })
+    .catch(error => console.error('Error:', error));
+  });
+});
