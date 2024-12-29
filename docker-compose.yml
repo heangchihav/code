@@ -1,6 +1,5 @@
 version: '3.8'
 
-
 volumes:
   certs:
     driver: local
@@ -16,8 +15,9 @@ volumes:
     driver: local
 
 networks:
-  elastic:
-    driver: bridge
+  default:
+    name: elastic
+    external: false
 
 services:
   fastapi:
@@ -32,8 +32,6 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - LOGSTASH_HOST=logstash
       - LOGSTASH_PORT=5000
-    networks:
-      - elastic
     depends_on:
       logstash:
         condition: service_healthy
@@ -52,13 +50,20 @@ services:
     user: "0"
     command: >
       bash -c '
-        if [ ! -f /usr/share/elasticsearch/config/certs/ca.zip ]; then
-          echo "Creating CA";
-          bin/elasticsearch-certutil ca --silent --pem -out /usr/share/elasticsearch/config/certs/ca.zip;
-          unzip /usr/share/elasticsearch/config/certs/ca.zip -d /usr/share/elasticsearch/config/certs;
+        if [ x${ELASTIC_PASSWORD} == x ]; then
+          echo "Set the ELASTIC_PASSWORD environment variable in the .env file";
+          exit 1;
+        elif [ x${KIBANA_PASSWORD} == x ]; then
+          echo "Set the KIBANA_PASSWORD environment variable in the .env file";
+          exit 1;
         fi;
-        if [ ! -f /usr/share/elasticsearch/config/certs/certs.zip ]; then
-          echo "Creating node certificates";
+        if [ ! -f config/certs/ca.zip ]; then
+          echo "Creating CA";
+          bin/elasticsearch-certutil ca --silent --pem -out config/certs/ca.zip;
+          unzip config/certs/ca.zip -d config/certs;
+        fi;
+        if [ ! -f config/certs/certs.zip ]; then
+          echo "Creating certs";
           echo -ne \
           "instances:\n"\
           "  - name: es01\n"\
@@ -85,18 +90,25 @@ services:
           "      - localhost\n"\
           "    ip:\n"\
           "      - 127.0.0.1\n"\
-          > /usr/share/elasticsearch/config/certs/instances.yml;
-          bin/elasticsearch-certutil cert --silent --pem -out /usr/share/elasticsearch/config/certs/certs.zip --in /usr/share/elasticsearch/config/certs/instances.yml --ca-cert /usr/share/elasticsearch/config/certs/ca/ca.crt --ca-key /usr/share/elasticsearch/config/certs/ca/ca.key;
-          unzip /usr/share/elasticsearch/config/certs/certs.zip -d /usr/share/elasticsearch/config/certs;
+          > config/certs/instances.yml;
+          bin/elasticsearch-certutil cert --silent --pem -out config/certs/certs.zip --in config/certs/instances.yml --ca-cert config/certs/ca/ca.crt --ca-key config/certs/ca/ca.key;
+          unzip config/certs/certs.zip -d config/certs;
         fi;
-        chown -R 1000:0 /usr/share/elasticsearch/config/certs;
-        echo "Certificate setup completed";
+        echo "Setting file permissions"
+        chown -R root:root config/certs;
+        find . -type d -exec chmod 750 \{\} \;;
+        find . -type f -exec chmod 640 \{\} \;;
+        echo "Waiting for Elasticsearch availability";
+        until curl -s --cacert config/certs/ca/ca.crt https://es01:9200 | grep -q "missing authentication credentials"; do sleep 30; done;
+        echo "Setting kibana_system password";
+        until curl -s -X POST --cacert config/certs/ca/ca.crt -u "elastic:${ELASTIC_PASSWORD}" -H "Content-Type: application/json" https://es01:9200/_security/user/kibana_system/_password -d "{\"password\":\"${KIBANA_PASSWORD}\"}" | grep -q "^{}"; do sleep 10; done;
+        echo "All done!";
       '
     healthcheck:
       test: ["CMD-SHELL", "[ -f config/certs/es01/es01.crt ]"]
       interval: 1s
       timeout: 5s
-      retries: 120
+      retries: 10
 
   es01:
     depends_on:
@@ -142,7 +154,6 @@ services:
       interval: 10s
       timeout: 10s
       retries: 120
-
 
   es02:
     depends_on:
@@ -279,7 +290,8 @@ services:
     volumes:
       - logstashdata01:/usr/share/logstash/data
       - certs:/usr/share/logstash/certs
-      - ./logstash.conf:/usr/share/logstash/pipeline/logstash.conf:ro
+      - ./logstash/pipeline/logstash.conf:/usr/share/logstash/pipeline/logstash.conf:ro
+      - ./logstash/config/logstash.yml:/usr/share/logstash/config/logstash.yml:ro
     environment:
       - NODE_NAME=logstash
       - xpack.monitoring.enabled=false
@@ -290,10 +302,3 @@ services:
     ports:
       - "5044:5044/udp"
     mem_limit: ${LS_MEM_LIMIT}
-    networks:
-      - elastic
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:9600/_node/stats"]
-      interval: 10s
-      timeout: 10s
-      retries: 120
