@@ -291,7 +291,7 @@ services:
       - logstashdata01:/usr/share/logstash/data
       - certs:/usr/share/logstash/certs
       - ./logstash/pipeline/logstash.conf:/usr/share/logstash/pipeline/logstash.conf:ro
-      - ./logstash/config/logstash.yml:/usr/share/logstash/config/logstash.yml:ro
+      - ./logstash/config/logstash.yml:/usr/share/logstash/config/logstash.yml
     environment:
       - NODE_NAME=logstash
       - xpack.monitoring.enabled=false
@@ -302,3 +302,8 @@ services:
     ports:
       - "5044:5044/udp"
     mem_limit: ${LS_MEM_LIMIT}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9600/_node || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
